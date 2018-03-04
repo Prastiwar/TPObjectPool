@@ -295,7 +295,7 @@ namespace TP.Utilities
         {
             if (Pool.ContainsKey(_poolName) && _index < Pool.Count)
             {
-                if (Pool[_poolName][_index].activeSelf)
+                if (!Pool[_poolName][_index].activeSelf)
                 {
                     return Pool[_poolName][_index];
                 }
@@ -338,7 +338,59 @@ namespace TP.Utilities
         }
 
         /// <summary>  
-        ///  Returns deactivated object from pool or creates new object if there is no free objects.
+        ///  Returns first activated object from pool.
+        /// </summary> 
+        /// <param name="_poolName">Unique Key of pool given on adding.</param>
+        public static GameObject GetBusyObjOf(string _poolName)
+        {
+            if (Pool.ContainsKey(_poolName))
+            {
+                foreach (var obj in Pool[_poolName])
+                {
+                    if (!obj.activeSelf)
+                        return obj;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>  
+        ///  Returns activated object from pool.
+        /// </summary> 
+        /// <param name="_poolName">Unique Key of pool given on adding.</param>
+        /// <param name="_index">Index of object in pool.</param>
+        public static GameObject GetBusyObjOf(string _poolName, int _index)
+        {
+            if (Pool.ContainsKey(_poolName) && _index < Pool.Count)
+            {
+                if (Pool[_poolName][_index].activeSelf)
+                {
+                    return Pool[_poolName][_index];
+                }
+            }
+            return null;
+        }
+
+        /// <summary>  
+        ///  Returns first activated object from pool.
+        /// </summary> 
+        /// <param name="_gameObject">Object which has its pool.</param>
+        public static GameObject GetBusyObjOf(GameObject _gameObject)
+        {
+            string TKey = _gameObject.GetInstanceID().ToString();
+            if (Pool.ContainsKey(TKey))
+            {
+                foreach (var obj in Pool[TKey])
+                {
+                    if (obj.activeSelf)
+                        return obj;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>  
+        ///  Returns List of deactivated object from pool.
         /// </summary> 
         /// <param name="_gameObject">Object which has its pool.</param>
         public static List<GameObject> GetAllFreeObjects(GameObject _gameObject)
@@ -347,7 +399,7 @@ namespace TP.Utilities
         }
 
         /// <summary>  
-        ///  Returns deactivated object from pool or creates new object if there is no free objects.
+        ///  Returns List of deactivated object from pool.
         /// </summary> 
         /// <param name="_poolName">Unique Key of pool given on adding.</param>
         public static List<GameObject> GetAllFreeObjects(string _poolName)
@@ -362,6 +414,33 @@ namespace TP.Utilities
                 }
             }
             return freeObjects;
+        }
+
+        /// <summary>  
+        ///  Returns List of activated object from pool.
+        /// </summary> 
+        /// <param name="_gameObject">Object which has its pool.</param>
+        public static List<GameObject> GetAllBusyObjects(GameObject _gameObject)
+        {
+            return GetAllBusyObjects(_gameObject.GetInstanceID().ToString());
+        }
+
+        /// <summary>  
+        ///  Returns List of activated object from pool.
+        /// </summary> 
+        /// <param name="_poolName">Unique Key of pool given on adding.</param>
+        public static List<GameObject> GetAllBusyObjects(string _poolName)
+        {
+            List<GameObject> busyObjects = new List<GameObject>();
+            if (Pool.ContainsKey(_poolName))
+            {
+                foreach (var obj in Pool[_poolName])
+                {
+                    if (obj.activeSelf)
+                        busyObjects.Add(obj);
+                }
+            }
+            return busyObjects;
         }
 
         /// <summary>  
