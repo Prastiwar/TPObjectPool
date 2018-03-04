@@ -1,4 +1,10 @@
-﻿using System.Collections;
+﻿/**
+*   Authored by Tomasz Piowczyk
+*   Copyright 2018 You're allowed to make changes in functionality and use for commercial or personal.
+*   You're not allowed to claim ownership of this script.
+*   https://github.com/Prastiwar/TPObjectPool/
+*/
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
