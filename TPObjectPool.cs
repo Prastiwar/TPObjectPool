@@ -5,7 +5,6 @@
 *   You're not allowed to claim ownership of this script.
 *   https://github.com/Prastiwar/TPObjectPool/
 */
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -416,10 +415,10 @@ namespace TP.Utilities
             {
                 foreach (var obj in Pool[_poolName])
                 {
-                    freeObjects.Add(obj);
+                    objects.Add(obj);
                 }
             }
-            return freeObjects;
+            return objects;
         }
 
         /// <summary>  
