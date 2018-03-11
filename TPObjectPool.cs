@@ -482,8 +482,7 @@ namespace TP.Utilities
         /// <param name="_gameObject">Object which has its pool.</param>
         public static int FreObjLengthOf(GameObject _gameObject)
         {
-            string TKey = _gameObject.GetInstanceID().ToString();
-            return FreObjLengthOf(TKey);
+            return FreObjLengthOf(_gameObject.GetInstanceID().ToString());
         }
 
         /// <summary>  
@@ -507,8 +506,7 @@ namespace TP.Utilities
         /// <param name="_gameObject">Object which has its pool.</param>
         public static int BusyObjLengthOf(GameObject _gameObject)
         {
-            string TKey = _gameObject.GetInstanceID().ToString();
-            return BusyObjLengthOf(TKey);
+            return BusyObjLengthOf(_gameObject.GetInstanceID().ToString());
         }
 
         /// <summary>  
@@ -522,6 +520,29 @@ namespace TP.Utilities
             {
                 if (obj.activeSelf)
                     length++;
+            }
+            return length;
+        }
+
+        /// <summary>  
+        ///  Returns length of all objects from its pool.
+        /// </summary> 
+        /// <param name="_gameObject">Object which has its pool.</param>
+        public static int ObjLengthOf(GameObject _gameObject)
+        {
+            return ObjLengthOf(_gameObject.GetInstanceID().ToString());
+        }
+
+        /// <summary>  
+        ///  Returns length of all objects from its pool.
+        /// </summary> 
+        /// <param name="_poolName">Unique Key of pool given on adding.</param>
+        public static int ObjLengthOf(string _poolName)
+        {
+            int length = 0;
+            foreach (var obj in Pool[_poolName])
+            {
+                length++;
             }
             return length;
         }
