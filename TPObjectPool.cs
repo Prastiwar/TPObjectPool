@@ -1,5 +1,6 @@
 ﻿/**
 *   Authored by Tomasz Piowczyk
+*   MIT LICENSE
 *   Copyright 2018 You're allowed to make changes in functionality and use for commercial or personal.
 *   You're not allowed to claim ownership of this script.
 *   https://github.com/Prastiwar/TPObjectPool/
@@ -393,6 +394,32 @@ namespace TP.Utilities
                 }
             }
             return null;
+        }
+        
+        /// <summary>  
+        ///  Returns List of all objects from pool.
+        /// </summary> 
+        /// <param name="_gameObject">Object which has its pool.</param>
+        public static List<GameObject> GetAllObjects(GameObject _gameObject)
+        {
+            return GetAllObjects(_gameObject.GetInstanceID().ToString());
+        }
+
+        /// <summary>  
+        ///  Returns List of all objects from pool.
+        /// </summary> 
+        /// <param name="_poolName">Unique Key of pool given on adding.</param>
+        public static List<GameObject> GetAllObjects(string _poolName)
+        {
+            List<GameObject> objects = new List<GameObject>();
+            if (Pool.ContainsKey(_poolName))
+            {
+                foreach (var obj in Pool[_poolName])
+                {
+                    freeObjects.Add(obj);
+                }
+            }
+            return freeObjects;
         }
 
         /// <summary>  

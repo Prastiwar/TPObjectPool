@@ -44,6 +44,10 @@ NOTE: If you use .NET below 4 use StartCoroutine(..)
 <br>
 
 * #### Object getters
+<img src = https://d3higte790sj35.cloudfront.net/images/ab/vo/5f6efb9443f110c18d9552bc7d7ae9a8.png> </img>
+<br>
+<img src = https://d3higte790sj35.cloudfront.net/images/ga/zo/f1a3a7755c2446c3d4e6ac75439f6712.png> </img>
+<br>
 <img src = https://d3higte790sj35.cloudfront.net/images/md/tv/21ea98b7cf47502dcd23368602f96708.png> </img>
 <br>
 <img src = https://d3higte790sj35.cloudfront.net/images/uy/qr/ecb89367be8bcc38d47e98699fb34839.png> </img>
