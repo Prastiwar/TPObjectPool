@@ -30,7 +30,8 @@ You can also read more about object pool pattern itself there: https://en.wikipe
 
 ## Using
 
-See my wiki for [documentation](https://github.com/Prastiwar/TPObjectPool/wiki).  
+See my wiki for [documentation](https://github.com/Prastiwar/TPObjectPool/wiki). 
+There is page with [examples](https://github.com/Prastiwar/TPObjectPool/wiki/Examples) of using this script
 
 
 ## Contributing
