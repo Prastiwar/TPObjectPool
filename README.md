@@ -1,93 +1,48 @@
 # TPObjectPool
-Script that helps you to manage Object Pooling in Unity.
 
-It's fully documented, lightweight script allowing you to increase performance of your game using Object Pool pattern.
-<br>
-You can read about this pattern there: https://en.wikipedia.org/wiki/Object_pool_pattern
-<br>
-<br>
-* #### README'll be changed in short time - rebuilding repository after Big Update
+***Fully documented, lightweight script that helps you to increase performance in your game by manage Object Pooling in Unity.***
 
-* #### Object activation
-<img src = https://d3higte790sj35.cloudfront.net/images/lh/te/084f8ce85ffc564f922fd2ac45e4f540.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/re/ds/d210125703dcd54557d68c2ec0732759.png> </img>
-NOTE: If you use .NET below 4 use StartCoroutine(..)
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/qy/qh/7bb06996bb427a8209b6e894bdf3f910.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/vi/vg/9fa38c356b7d79bdec6aff76bf58db46.png> </img>
-<br>
+[![GitHub last commit](https://img.shields.io/github/last-commit/Prastiwar/TPObjectPool.svg?label=Updated&style=flat-square&longCache=true)](https://github.com/Prastiwar/TPObjectPool/commits/master)
+[![license](https://img.shields.io/github/license/Prastiwar/TPObjectPool.svg?style=flat-square&longCache=true)](https://github.com/Prastiwar/TPObjectPool/blob/master/LICENSE)
+[![GitHub forks](https://img.shields.io/github/forks/Prastiwar/TPObjectPool.svg?style=social&label=Fork&longCache=true)](https://github.com/Prastiwar/TPObjectPool/fork)
+[![GitHub stars](https://img.shields.io/github/stars/Prastiwar/TPObjectPool.svg?style=social&label=★Star&longCache=true)](https://github.com/Prastiwar/TPObjectPool/stargazers)
+[![GitHub watchers](https://img.shields.io/github/watchers/Prastiwar/TPObjectPool.svg?style=social&labelWatcher&longCache=true)](https://github.com/Prastiwar/TPObjectPool/watchers)
+[![GitHub contributors](https://img.shields.io/github/contributors/Prastiwar/TPObjectPool.svg?style=social&longCache=true)](https://github.com/Prastiwar/TPObjectPool/contributors)
 
-* #### Object deactivation
-<img src = https://d3higte790sj35.cloudfront.net/images/cj/yw/63b1f288e1de83fa3bbb43c3a415d2e8.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/is/dt/4d9d824d712317f998830838c01d5199.png> </img>
-NOTE: If you use .NET below 4 use StartCoroutine(..)
-<br>
+![GitHub repo size in bytes](https://img.shields.io/github/repo-size/Prastiwar/TPObjectPool.svg?style=flat-square&longCache=true)
+[![GitHub issues](https://img.shields.io/github/issues/Prastiwar/TPObjectPool.svg?style=flat-square&longCache=true)](https://github.com/Prastiwar/TPObjectPool/issues)
+[![GitHub closed issues](https://img.shields.io/github/issues-closed/Prastiwar/TPObjectPool.svg?style=flat-square&longCache=true)](https://github.com/Prastiwar/TPObjectPool/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/Prastiwar/TPObjectPool.svg?style=flat-square&longCache=true)](https://github.com/Prastiwar/TPObjectPool/pulls)
+[![GitHub closed pull requests](https://img.shields.io/github/issues-pr-closed/Prastiwar/TPObjectPool.svg?style=flat-square&longCache=true)](https://github.com/Prastiwar/TPObjectPool/pulls)
 
-* #### Memory allocation
-<img src = https://d3higte790sj35.cloudfront.net/images/mn/rh/692be503ffe7d12b21b7e7aa1914cb7c.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/tg/qg/79f56e239c5b530206127a964b1d1403.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/ms/lp/41547d90336b447b6a3ab851febaf297.png> </img>
-<br>
+[![Made with Unity](https://img.shields.io/badge/Made%20with-Unity-000000.svg?longCache=true&style=for-the-badge&colorA=666677&colorB=222222)](https://unity3d.com/)
 
-* #### Memory release
-<img src = https://d3higte790sj35.cloudfront.net/images/ti/wc/eed4de8764742da8da2ded71511381b1.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/rv/kz/c48fab99ff77266367ea1c9c2a987c5c.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/lm/wb/b6c7c6bcc302fc1508c5e4136fbdc21d.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/ld/jj/e899f891330a4c3046ff33ec83b86f22.png> </img>
-<br>
+## Before start
 
-* #### Object getters
-<img src = https://d3higte790sj35.cloudfront.net/images/ab/vo/5f6efb9443f110c18d9552bc7d7ae9a8.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/ga/zo/f1a3a7755c2446c3d4e6ac75439f6712.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/md/tv/21ea98b7cf47502dcd23368602f96708.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/uy/qr/ecb89367be8bcc38d47e98699fb34839.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/vf/io/67bc7e34b2f7f002fb9f6c5d42625d8e.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/zm/rt/7075f44a64516508545f54d505d8c4fb.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/qi/sw/abc8c2581a51854c96f3e07fb9b85e29.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/oq/le/ffe7b9c70612b5df91777040a955a113.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/nz/kr/a5606789aa1171a3e0e3d0e2c926ead5.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/jb/wj/392fcdd0c36927742b881eb8a3485025.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/ju/rx/c342f3a97c6952ba3b5efe2de83f4263.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/zd/cw/00024d50784aebb8e1cd4951674b58ab.png> </img>
-<br>
+- [x] Make sure you have **Unity 2017 or newer** - didn't tested on lower versions.
 
 
-* #### Length getters
-<img src = https://d3higte790sj35.cloudfront.net/images/vo/wi/3aa65eb68e7c18b005e6f5bdd088d4bd.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/bp/ku/6d3c50b65506fc7aba5f4d8652d6a300.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/nt/sh/c605d6fd548e7ea7455bceedb4b93178.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/za/nz/e32675d78e14911df6391c32e7fa70c8.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/zo/se/f438f4c0a88e40bf5c60fec3b2399bde.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/pv/du/a6efd7f856b73fa4ab354c9ec77230dd.png> </img>
-<br>
+## Getting Started
 
-* #### Delegates
-<img src = https://d3higte790sj35.cloudfront.net/images/gq/zu/b2530b9fbd4678a815b5a97f303b37ed.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/il/of/d82679a3b42116634b5e03dfd24c063d.png> </img>
-<br>
-<img src = https://d3higte790sj35.cloudfront.net/images/ft/ln/521f5072ef3d0fa5f139d0680d917dbe.png> </img>
+See my wiki for [documentation](https://github.com/Prastiwar/TPObjectPool/wiki).
+You can also read more about object pool pattern itself there: https://en.wikipedia.org/wiki/Object_pool_pattern
+
+
+## Using
+
+See my wiki for [documentation](https://github.com/Prastiwar/TPObjectPool/wiki).  
+
+
+## Contributing
+
+You can freely contribute with me by reporting issues and making pull requests!  
+Please read [CONTRIBUTING.md](https://github.com/Prastiwar/TPObjectPool/blob/master/.github/CONTRIBUTING.md) for details on contributing.
+
+## Authors
+
+* ![Avatar](https://avatars3.githubusercontent.com/u/33370172?s=40&v=4)  [**Tomasz Piowczyk**](https://github.com/Prastiwar) - *The Creator*  
+See also the list of [contributors](https://github.com/Prastiwar/TPObjectPool/contributors) who participated in this project.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE.md](https://github.com/Prastiwar/TPObjectPool/blob/master/LICENSE) file for details.
