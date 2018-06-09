@@ -1,557 +1,299 @@
 ﻿/**
 *   Authored by Tomasz Piowczyk
-*   MIT LICENSE
-*   Copyright 2018 You're allowed to make changes in functionality and use for commercial or personal.
-*   You're not allowed to claim ownership of this script.
-*   https://github.com/Prastiwar/TPObjectPool/
+*   MIT LICENSE (https://github.com/Prastiwar/TPObjectPool/blob/master/LICENSE)
 */
+using System;
+using System.Linq;
 using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 
-namespace TP.Utilities
+namespace TP
 {
-    /// <summary>  
-    ///  This class allows you to manage Objects in Pools.
-    /// </summary>  
-    public class TPObjectPool
+    /// <summary> This class allows you to manage Objects in Pools. </summary>  
+    public static class TPObjectPool
     {
-        public delegate void ActivationEventHandler(GameObject _gameObject, bool _value);
-        static ActivationEventHandler _onBeforeActivation;
-        static ActivationEventHandler _onAfterActivation;
+        private static Dictionary<string, List<GameObject>> pool = new Dictionary<string, List<GameObject>>();
 
-        static Dictionary<string, List<GameObject>> Pool = new Dictionary<string, List<GameObject>>();
+        public delegate void ActivationEventHandler(GameObject gameObject, bool value);
 
-        /// <summary>  
-        ///  This ActivationEventHandler delegate is called just before object from pool is active/deactive.
-        /// </summary>  
-        public static ActivationEventHandler OnBeforeActivation
+        /// <summary> This ActivationEventHandler delegate is called just before object from pool is set active/deactive. </summary>  
+        public static ActivationEventHandler OnBeforeActivation { get; set; }
+
+        /// <summary> This ActivationEventHandler delegate is called just after object from pool is set active/deactive. </summary>  
+        public static ActivationEventHandler OnAfterActivation { get; set; }
+
+        /// <summary> Set activation of GameObject. </summary>  
+        /// <param name="gameObject">GameObject to active.</param>
+        public static void SetActive(GameObject gameObject, bool value, Vector3? position = default(Vector3?), Quaternion? rotation = default(Quaternion?))
         {
-            get
+            if (gameObject == null)
             {
-                if (_onBeforeActivation == null)
-                    _onBeforeActivation = OnNull;
-                return _onBeforeActivation;
-            }
-
-            set { _onBeforeActivation = value; }
-        }
-
-        /// <summary>  
-        ///  This ActivationEventHandler delegate is called just after object from pool is active/deactive.
-        /// </summary>  
-        public static ActivationEventHandler OnAfterActivation
-        {
-            get
-            {
-                if (_onAfterActivation == null)
-                    _onAfterActivation = OnNull;
-                return _onAfterActivation;
-            }
-
-            set { _onAfterActivation = value; }
-        }
-
-        static void OnNull(GameObject _gameObject, bool _value) { }
-
-        /// <summary>  
-        ///  Activates GameObject.
-        /// </summary>  
-        /// <param name="_gameObject">GameObject to active.</param>
-        public static void ActiveObj(GameObject _gameObject)
-        {
-            if (_gameObject == null)
-            {
+                Debug.LogError("You're trying to set activation of Null object");
                 return;
             }
 
-            OnBeforeActivation(_gameObject, true);
+            if (position.HasValue)
+                gameObject.transform.position = position.Value;
+            if (rotation.HasValue)
+                gameObject.transform.rotation = rotation.Value;
 
-            if (!_gameObject.activeSelf)
-                _gameObject.SetActive(true);
-
-            OnAfterActivation(_gameObject, true);
+            SafeInvoke(OnBeforeActivation, gameObject, value);
+            gameObject.SetActive(value);
+            SafeInvoke(OnAfterActivation, gameObject, value);
         }
 
-        /// <summary>  
-        ///  Activates gameobject with given position.
-        /// </summary> 
-        /// <param name="_gameObject">GameObject to active.</param>
-        public static void ActiveObj(GameObject _gameObject, Vector3 _position)
+        /// <summary> Set activation of All GameObjects in pool. </summary>  
+        /// <param name="poolName">Unique Key of pool.</param>
+        public static void SetActive(string poolName, bool value, Vector3? position = default(Vector3?), Quaternion? rotation = default(Quaternion?))
         {
-            _gameObject.transform.position = _position;
-            ActiveObj(_gameObject);
-        }
-
-        /// <summary>  
-        ///  Activates gameobject with given position and rotation.
-        /// </summary> 
-        /// <param name="_gameObject">GameObject to active.</param>
-        public static void ActiveObj(GameObject _gameObject, Vector3 _position, Quaternion _rotation)
-        {
-            Transform trans = _gameObject.transform;
-            trans.position = _position;
-            trans.rotation = _rotation;
-            ActiveObj(_gameObject);
+            if (SafeCheck(poolName))
+                pool[poolName].ForEach(obj => SetActive(obj, value, position, rotation));
         }
 
 #if NET_2_0 || NET_2_0_SUBSET
-        /// <summary>  
-        ///  Coroutine that activates gameobject after delay.
-        /// </summary> 
-        /// <param name="_gameObject">GameObject to active.</param>
-        public static IEnumerator ActiveObj(GameObject _gameObject, float _delay)
+        /// <summary> API to easier call StartCoroutine(SetActive(parameters)). </summary> 
+        /// <param name="mono">To call coroutine we need monobehaviour.</param>
+        /// <param name="gameObject">GameObject to active.</param>
+        public static void SetActive(MonoBehaviour mono, GameObject gameObject, float delay, bool value, Vector3? position = default(Vector3?), Quaternion? rotation = default(Quaternion?))
         {
-            yield return new WaitForSeconds(_delay);
-            ActiveObj(_gameObject);
+            mono.StartCoroutine(SetActive(gameObject, delay, value, position, rotation));
+        }
+
+        /// <summary> API to easier call StartCoroutine(SetActive(parameters)). </summary> 
+        /// <param name="mono">To call coroutine we need monobehaviour.</param>
+        /// <param name="gameObject">GameObject to active.</param>
+        public static void SetActive(MonoBehaviour mono, string poolName, float delay, bool value, Vector3? position = default(Vector3?), Quaternion? rotation = default(Quaternion?))
+        {
+            mono.StartCoroutine(SetActive(poolName, delay, value, position, rotation));
+        }
+
+        /// <summary> Coroutine that sets activation of GameObject after delay. REMEMBER TO CALL IT BY StartCoroutine() </summary> 
+        /// <param name="gameObject">GameObject to active.</param>
+        public static IEnumerator SetActive(GameObject gameObject, float delay, bool value, Vector3? position = default(Vector3?), Quaternion? rotation = default(Quaternion?))
+        {
+            yield return new WaitForSeconds(delay);
+            SetActive(gameObject, value, position, rotation);
+        }
+
+        /// <summary> Coroutine that sets activation of All GameObjects in pool after delay. REMEMBER TO CALL IT BY StartCoroutine() </summary> 
+        /// <param name="gameObject">GameObject to active.</param>
+        public static IEnumerator SetActive(string poolName, float delay, bool value, Vector3? position = default(Vector3?), Quaternion? rotation = default(Quaternion?))
+        {
+            yield return new WaitForSeconds(delay);
+            if (SafeCheck(poolName))
+                pool[poolName].ForEach(obj => SetActive(obj, value, position, rotation));
         }
 #else
-
-        /// <summary>  
-        ///  Activates gameobject after delay.
-        /// </summary> 
-        /// <param name="_gameObject">GameObject to active.</param>
-        public static async void ActiveObj(GameObject _gameObject, float _delay)
+        /// <summary> Sets activation of GameObject after delay. </summary> 
+        /// <param name="gameObject">GameObject to active.</param>
+        public static async void SetActive(GameObject gameObject, float delay, bool value, Vector3? position = default(Vector3?), Quaternion? rotation = default(Quaternion?))
         {
-            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(_delay));
-            ActiveObj(_gameObject);
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            SetActive(gameObject, value, position, rotation);
+        }
+
+        /// <summary> Sets activation of All GameObjects in pool after delay. </summary> 
+        /// <param name="gameObject">GameObject to active.</param>
+        public static async void SetActive(string poolName, float delay, bool value, Vector3? position = default(Vector3?), Quaternion? rotation = default(Quaternion?))
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            if (SafeCheck(poolName))
+                pool[poolName].ForEach(obj => SetActive(obj, value, position, rotation));
         }
 #endif
 
-        /// <summary>  
-        ///  Deactivates gameobject.
-        /// </summary> 
-        /// <param name="_gameObject">GameObject to deactive.</param>
-        public static void DeactiveObj(GameObject _gameObject)
+        /// <summary> Creates or adds to existing pool with its unique key with GameObjects. </summary> 
+        /// <param name="poolName">Unique Key of pool.</param>
+        /// <param name="gameObjects">All GameObjects which should be in one pool.</param>
+        public static void AddToPool(string poolName, params GameObject[] gameObjects)
         {
-            if (_gameObject == null)
-                return;
-
-            OnBeforeActivation(_gameObject, false);
-
-            if (_gameObject.activeSelf)
-                _gameObject.SetActive(false);
-
-            OnAfterActivation(_gameObject, false);
-        }
-
-#if NET_2_0 || NET_2_0_SUBSET
-        /// <summary>  
-        ///  Coroutine that deactivates gameobject after delay.
-        /// </summary> 
-        /// <param name="_gameObject">GameObject to deactive.</param>
-        public static IEnumerator DeactiveObj(GameObject _gameObject, float _delay)
-        {
-            yield return new WaitForSeconds(_delay);
-            DeactiveObj(_gameObject);
-        }
-#else
-
-        /// <summary>  
-        ///  Deactivates gameobject after delay.
-        /// </summary> 
-        /// <param name="_gameObject">GameObject to deactive.</param>
-        public static async void DeactiveObj(GameObject _gameObject, float _delay)
-        {
-            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(_delay));
-            DeactiveObj(_gameObject);
-        }
-#endif
-
-        /// <summary>  
-        ///  Clears whole pool.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool.</param>
-        public static void ClearPool(string _poolName)
-        {
-            if (Pool.ContainsKey(_poolName))
-            {
-                Pool[_poolName].Clear();
-            }
-        }
-
-        /// <summary>  
-        ///  Removes GameObjects from pool and Destroys them.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool.</param>
-        /// <param name="_gameObjects">All GameObjects which should be removed from pool.</param>
-        public static void RemoveFromPool(string _poolName, params GameObject[] _gameObjects)
-        {
-            if (Pool.ContainsKey(_poolName))
-            {
-                foreach (var obj in _gameObjects)
-                {
-                    int index = Pool[_poolName].IndexOf(obj);
-                    GameObject.Destroy(Pool[_poolName][index]);
-                    Pool[_poolName].Remove(obj);
-                }
-            }
-        }
-
-        /// <summary>  
-        ///  Removes GameObjects from their pool and Destroys them.
-        /// </summary> 
-        /// <param name="_gameObjects">All GameObjects which should be removed from pool.</param>
-        public static void RemoveFromPool(params GameObject[] _gameObjects)
-        {
-            int length = _gameObjects.Length;
-            foreach (var item in Pool)
+            int length = gameObjects.Length;
+            if (HasKey(poolName))
             {
                 for (int i = 0; i < length; i++)
                 {
-                    if (item.Value.Contains(_gameObjects[i]))
-                    {
-                        RemoveFromPool(item.Key, _gameObjects);
-                        return;
-                    }
-                }
-            }
-        }
-
-        /// <summary>  
-        ///  Creates pool with its unique key with GameObjects.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool.</param>
-        /// <param name="_gameObjects">All GameObjects which should be in one pool.</param>
-        public static void AddToPool(string _poolName, params GameObject[] _gameObjects)
-        {
-            int length = _gameObjects.Length;
-
-            if (Pool.ContainsKey(_poolName))
-            {
-                for (int i = 0; i < length; i++)
-                {
-                    GameObject obj = GameObject.Instantiate(_gameObjects[i]);
-                    obj.SetActive(false);
-                    Pool[_poolName].Add(obj);
+                    gameObjects[i].SetActive(false);
+                    pool[poolName].Add(UnityEngine.Object.Instantiate(gameObjects[i]));
                 }
             }
             else
             {
-                List<GameObject> list = new List<GameObject>();
-
+                List<GameObject> newList = new List<GameObject>();
                 for (int i = 0; i < length; i++)
                 {
-                    GameObject obj = GameObject.Instantiate(_gameObjects[i]);
-                    obj.SetActive(false);
-                    list.Add(obj);
+                    gameObjects[i].SetActive(false);
+                    newList.Add(UnityEngine.Object.Instantiate(gameObjects[i]));
                 }
-                Pool.Add(_poolName, list);
+                pool[poolName] = newList;
             }
         }
 
-        /// <summary>  
-        ///  Creates pool of length with GameObject.
-        /// </summary> 
-        /// <param name="_gameObject">GameObject which should multiplied in pool.</param>
-        /// <param name="_length">Length of pool - how many copies of GameObject should be in pool.</param>
-        public static void AddToPool(GameObject _gameObject, int _length)
+        /// <summary> Creates pool of unique Key of length with GameObject. </summary> 
+        /// <param name="poolName">Unique Key of pool.</param>
+        /// <param name="gameObject">GameObject which should multiplied in pool.</param>
+        /// <param name="length">Length of pool - how many copies of GameObject should be in pool.</param>
+        public static void AddToPool(string poolName, GameObject gameObject, int length)
         {
-            string TKey = _gameObject.GetInstanceID().ToString();
-            for (int i = 0; i < _length; i++)
-            {
-                AddToPool(TKey, _gameObject);
-            }
+            GameObject[] copies = new GameObject[length];
+            for (int i = 0; i < length; i++)
+                copies[i] = gameObject;
+            AddToPool(poolName, copies);
         }
 
-        /// <summary>  
-        ///  Creates pool of unique Key of length with GameObject.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool.</param>
-        /// <param name="_gameObject">GameObject which should multiplied in pool.</param>
-        /// <param name="_length">Length of pool - how many copies of GameObject should be in pool.</param>
-        public static void AddToPool(string _poolName, GameObject _gameObject, int _length)
+        /// <summary> Removes GameObjects from pool and destroys them. </summary> 
+        /// <param name="poolName">Unique Key of pool.</param>
+        /// <param name="gameObjects">All GameObjects which should be removed from pool.</param>
+        public static void RemoveFromPool(string poolName, params GameObject[] gameObjects)
         {
-            for (int i = 0; i < _length; i++)
+            if (SafeCheck(poolName))
             {
-                AddToPool(_poolName, _gameObject);
-            }
-        }
-
-        /// <summary>  
-        ///  Returns deactivated object from pool or creates new object(from first object in pool) if there is no free objects.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool given on adding.</param>
-        /// <param name="_createNew">if true, it'll create new object when pool is empty of free objects.</param>
-        public static GameObject GetFreeObjOf(string _poolName, bool _createNew)
-        {
-            if (Pool.ContainsKey(_poolName))
-            {
-                foreach (var obj in Pool[_poolName])
+                foreach (var obj in gameObjects)
                 {
-                    if (!obj.activeSelf)
-                        return obj;
+                    int index = pool[poolName].IndexOf(obj);
+                    UnityEngine.Object.Destroy(pool[poolName][index]);
+                    pool[poolName].Remove(obj);
                 }
-                if (_createNew)
+            }
+        }
+
+        /// <summary> Returns deactivated object from pool or creates new object(from first object in pool) if there is no free objects. </summary> 
+        /// <param name="poolName">Unique Key of pool given on adding.</param>
+        /// <param name="createNew">if true, it'll create new object when there is no free objects.</param>
+        public static GameObject GetFreeObject(string poolName, bool createNew)
+        {
+            if (SafeCheck(poolName))
+            {
+                if (pool[poolName].Any(FreeObject))
+                    return pool[poolName].First(FreeObject);
+
+                if (createNew && pool[poolName].Count > 0)
                 {
-                    GameObject newObj = GameObject.Instantiate(Pool[_poolName][0]);
-                    Pool[_poolName].Add(newObj);
+                    GameObject newObj = UnityEngine.Object.Instantiate(pool[poolName][0]);
+                    pool[poolName].Add(newObj);
                     return newObj;
                 }
             }
             return null;
         }
 
-        /// <summary>  
-        ///  Returns deactivated object from pool or creates new object if there is no free objects.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool given on adding.</param>
-        /// <param name="_index">Index of object in pool.</param>
-        /// <param name="_createNew">if true, it'll create new object when pool is empty of free objects.</param>
-        public static GameObject GetFreeObjOf(string _poolName, int _index, bool _createNew)
+        /// <summary> Returns first activated object from pool. </summary> 
+        /// <param name="poolName">Unique Key of pool given on adding.</param>
+        public static GameObject GetBusyObject(string poolName)
         {
-            if (Pool.ContainsKey(_poolName) && _index < Pool.Count)
-            {
-                if (!Pool[_poolName][_index].activeSelf)
-                {
-                    return Pool[_poolName][_index];
-                }
-                else
-                {
-                    if (_createNew)
-                    {
-                        GameObject newObj = GameObject.Instantiate(Pool[_poolName][_index]);
-                        Pool[_poolName].Add(newObj);
-                        return newObj;
-                    }
-                }
-            }
-            return null;
+            return HasAnyBusyObject(poolName) ? pool[poolName].First(BusyObject) : null;
         }
 
-        /// <summary>  
-        ///  Returns deactivated object from pool or creates new object if there is no free objects.
-        /// </summary> 
-        /// <param name="_gameObject">Object which has its pool.</param>
-        /// <param name="_createNew">if true, it'll create new object when pool is empty of free objects.</param>
-        public static GameObject GetFreeObjOf(GameObject _gameObject, bool _createNew)
+        /// <summary> Returns List of all objects from pool. </summary> 
+        /// <param name="poolName">Unique Key of pool given on adding.</param>
+        public static List<GameObject> GetObjects(string poolName)
         {
-            string TKey = _gameObject.GetInstanceID().ToString();
-            if (Pool.ContainsKey(TKey))
-            {
-                foreach (var obj in Pool[TKey])
-                {
-                    if (!obj.activeSelf)
-                        return obj;
-                }
-                if (_createNew)
-                {
-                    GameObject newObj = GameObject.Instantiate(_gameObject);
-                    Pool[TKey].Add(newObj);
-                    return newObj;
-                }
-            }
-            return null;
+            return SafeCheck(poolName) ? pool[poolName] : null;
         }
 
-        /// <summary>  
-        ///  Returns first activated object from pool.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool given on adding.</param>
-        public static GameObject GetBusyObjOf(string _poolName)
+        /// <summary> Returns List of deactivated object from pool. </summary> 
+        /// <param name="poolName">Unique Key of pool given on adding.</param>
+        public static List<GameObject> GetFreeObjects(string poolName)
         {
-            if (Pool.ContainsKey(_poolName))
-            {
-                foreach (var obj in Pool[_poolName])
-                {
-                    if (!obj.activeSelf)
-                        return obj;
-                }
-            }
-            return null;
+            return HasAnyFreeObject(poolName) ? pool[poolName].Where(FreeObject).ToList() : null;
         }
 
-        /// <summary>  
-        ///  Returns activated object from pool.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool given on adding.</param>
-        /// <param name="_index">Index of object in pool.</param>
-        public static GameObject GetBusyObjOf(string _poolName, int _index)
+        /// <summary> Returns List of activated object from pool.  </summary> 
+        /// <param name="poolName">Unique Key of pool given on adding.</param>
+        public static List<GameObject> GetBusyObjects(string poolName)
         {
-            if (Pool.ContainsKey(_poolName) && _index < Pool.Count)
-            {
-                if (Pool[_poolName][_index].activeSelf)
-                {
-                    return Pool[_poolName][_index];
-                }
-            }
-            return null;
+            return HasAnyBusyObject(poolName) ? pool[poolName].Where(BusyObject).ToList() : null;
         }
 
-        /// <summary>  
-        ///  Returns first activated object from pool.
-        /// </summary> 
-        /// <param name="_gameObject">Object which has its pool.</param>
-        public static GameObject GetBusyObjOf(GameObject _gameObject)
+        /// <summary> Returns length of deactivated objects from its pool. </summary> 
+        /// <param name="poolName">Unique Key of pool given on adding.</param>
+        public static int FreeObjectsLength(string poolName)
         {
-            string TKey = _gameObject.GetInstanceID().ToString();
-            if (Pool.ContainsKey(TKey))
-            {
-                foreach (var obj in Pool[TKey])
-                {
-                    if (obj.activeSelf)
-                        return obj;
-                }
-            }
-            return null;
-        }
-        
-        /// <summary>  
-        ///  Returns List of all objects from pool.
-        /// </summary> 
-        /// <param name="_gameObject">Object which has its pool.</param>
-        public static List<GameObject> GetAllObjects(GameObject _gameObject)
-        {
-            return GetAllObjects(_gameObject.GetInstanceID().ToString());
+            return HasAnyFreeObject(poolName) ? pool[poolName].Where(FreeObject).Count() : 0;
         }
 
-        /// <summary>  
-        ///  Returns List of all objects from pool.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool given on adding.</param>
-        public static List<GameObject> GetAllObjects(string _poolName)
+        /// <summary> Returns length of activated objects from its pool. </summary> 
+        /// <param name="poolName">Unique Key of pool given on adding.</param>
+        public static int BusyObjectsLength(string poolName)
         {
-            List<GameObject> objects = new List<GameObject>();
-            if (Pool.ContainsKey(_poolName))
-            {
-                foreach (var obj in Pool[_poolName])
-                {
-                    objects.Add(obj);
-                }
-            }
-            return objects;
+            return HasAnyBusyObject(poolName) ? pool[poolName].Where(BusyObject).Count() : 0;
         }
 
-        /// <summary>  
-        ///  Returns List of deactivated object from pool.
-        /// </summary> 
-        /// <param name="_gameObject">Object which has its pool.</param>
-        public static List<GameObject> GetAllFreeObjects(GameObject _gameObject)
+        /// <summary> Returns length of all objects from its pool. </summary> 
+        /// <param name="poolName">Unique Key of pool given on adding.</param>
+        public static int ObjectsLength(string poolName)
         {
-            return GetAllFreeObjects(_gameObject.GetInstanceID().ToString());
+            return SafeCheck(poolName) ? pool[poolName].Count : 0;
         }
 
-        /// <summary>  
-        ///  Returns List of deactivated object from pool.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool given on adding.</param>
-        public static List<GameObject> GetAllFreeObjects(string _poolName)
+        /// <summary> Checks if given key(pool) exists. </summary> 
+        /// <param name="poolName">Unique Key of pool.</param>
+        public static bool HasKey(string poolName)
         {
-            List<GameObject> freeObjects = new List<GameObject>();
-            if (Pool.ContainsKey(_poolName))
-            {
-                foreach (var obj in Pool[_poolName])
-                {
-                    if (!obj.activeSelf)
-                        freeObjects.Add(obj);
-                }
-            }
-            return freeObjects;
+            return pool.ContainsKey(poolName);
         }
 
-        /// <summary>  
-        ///  Returns List of activated object from pool.
-        /// </summary> 
-        /// <param name="_gameObject">Object which has its pool.</param>
-        public static List<GameObject> GetAllBusyObjects(GameObject _gameObject)
+        /// <summary> Checks if there is any free object in pool. </summary> 
+        /// <param name="poolName">Unique Key of pool.</param>
+        public static bool HasAnyObject(string poolName)
         {
-            return GetAllBusyObjects(_gameObject.GetInstanceID().ToString());
+            return SafeCheck(poolName) ? pool[poolName].Count > 0 : false;
         }
 
-        /// <summary>  
-        ///  Returns List of activated object from pool.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool given on adding.</param>
-        public static List<GameObject> GetAllBusyObjects(string _poolName)
+        /// <summary> Checks if there is any free object in pool. </summary> 
+        /// <param name="poolName">Unique Key of pool.</param>
+        public static bool HasAnyFreeObject(string poolName)
         {
-            List<GameObject> busyObjects = new List<GameObject>();
-            if (Pool.ContainsKey(_poolName))
-            {
-                foreach (var obj in Pool[_poolName])
-                {
-                    if (obj.activeSelf)
-                        busyObjects.Add(obj);
-                }
-            }
-            return busyObjects;
+            return SafeCheck(poolName) ? pool[poolName].Any(FreeObject) : false;
         }
 
-        /// <summary>  
-        ///  Returns length of deactivated objects from its pool.
-        /// </summary> 
-        /// <param name="_gameObject">Object which has its pool.</param>
-        public static int FreObjLengthOf(GameObject _gameObject)
+        /// <summary> Checks if there is any activated object in pool. </summary> 
+        /// <param name="poolName">Unique Key of pool.</param>
+        public static bool HasAnyBusyObject(string poolName)
         {
-            return FreObjLengthOf(_gameObject.GetInstanceID().ToString());
+            return SafeCheck(poolName) ? pool[poolName].Any(BusyObject) : false;
         }
 
-        /// <summary>  
-        ///  Returns length of deactivated objects from its pool.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool given on adding.</param>
-        public static int FreObjLengthOf(string _poolName)
+        /// <summary> Clears whole pool. </summary> 
+        /// <param name="poolName">Unique Key of pool.</param>
+        public static void ClearPool(string poolName)
         {
-            int length = 0;
-            foreach (var obj in Pool[_poolName])
-            {
-                if (!obj.activeSelf)
-                    length++;
-            }
-            return length;
+            if (SafeCheck(poolName))
+                RemoveFromPool(poolName, GetObjects(poolName).ToArray());
         }
 
-        /// <summary>  
-        ///  Returns length of activated objects from its pool.
-        /// </summary> 
-        /// <param name="_gameObject">Object which has its pool.</param>
-        public static int BusyObjLengthOf(GameObject _gameObject)
-        {
-            return BusyObjLengthOf(_gameObject.GetInstanceID().ToString());
-        }
-
-        /// <summary>  
-        ///  Returns length of activated objects from its pool.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool given on adding.</param>
-        public static int BusyObjLengthOf(string _poolName)
-        {
-            int length = 0;
-            foreach (var obj in Pool[_poolName])
-            {
-                if (obj.activeSelf)
-                    length++;
-            }
-            return length;
-        }
-
-        /// <summary>  
-        ///  Returns length of all objects from its pool.
-        /// </summary> 
-        /// <param name="_gameObject">Object which has its pool.</param>
-        public static int ObjLengthOf(GameObject _gameObject)
-        {
-            return ObjLengthOf(_gameObject.GetInstanceID().ToString());
-        }
-
-        /// <summary>  
-        ///  Returns length of all objects from its pool.
-        /// </summary> 
-        /// <param name="_poolName">Unique Key of pool given on adding.</param>
-        public static int ObjLengthOf(string _poolName)
-        {
-            int length = 0;
-            foreach (var obj in Pool[_poolName])
-            {
-                length++;
-            }
-            return length;
-        }
-
-        /// <summary>  
-        ///  Clears all pools.
-        /// </summary>  
+        /// <summary> Clears all pools. </summary>  
         public static void Dispose()
         {
-            Pool.Clear();
+            foreach (var pair in pool)
+                ClearPool(pair.Key);
         }
+
+        /// <summary> This checks for null before ActivationEventHandler is called. </summary>  
+        private static void SafeInvoke(ActivationEventHandler onActivation, GameObject gameObject, bool value)
+        {
+            if (onActivation != null)
+                onActivation(gameObject, value);
+        }
+
+        /// <summary> This checks for existing key and can throw log error. </summary>  
+        private static bool SafeCheck(string poolName)
+        {
+            if (HasKey(poolName))
+                return true;
+            Debug.LogError("Given key doesn't exist");
+            return false;
+        }
+
+        /// <summary> Returns func, where GameObject is activated </summary>
+        private static Func<GameObject, bool> BusyObject {
+            get { return obj => obj.activeSelf; }
+        }
+
+        /// <summary> Returns func, where GameObject is deactivated </summary>
+        private static Func<GameObject, bool> FreeObject {
+            get { return obj => !obj.activeSelf; }
+        }
+
     }
 }

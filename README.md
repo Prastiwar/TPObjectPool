@@ -6,6 +6,7 @@ It's fully documented, lightweight script allowing you to increase performance o
 You can read about this pattern there: https://en.wikipedia.org/wiki/Object_pool_pattern
 <br>
 <br>
+* #### README'll be changed in short time - rebuilding repository after Big Update
 
 * #### Object activation
 <img src = https://d3higte790sj35.cloudfront.net/images/lh/te/084f8ce85ffc564f922fd2ac45e4f540.png> </img>
