@@ -1,5 +1,13 @@
 # TPObjectPool ChangeLog
 
+## 04/07/2018
+
+- Changed AddToPool to CreatePool - now it only creates pool
+- Changed a lot of signatures
+- Removed activation delegates
+- Added more toggle helpers
+- More safety
+
 ## 02/07/2018
 
 - Completely rewritten TPObjectPool. It uses stacks:

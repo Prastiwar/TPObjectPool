@@ -21,41 +21,46 @@ namespace TP
     internal class TPObjectPooler : MonoBehaviour
     {
         /// <summary> Coroutine object hold data needed for ToggleActive </summary>
+        [System.Serializable]
         private struct PoolCoroutine
         {
-            public float Delay;
             public int PoolKey;
+            public float Delay;
             public TPObjectState State;
-            public bool ToggleAll;
+            public GameObject PoolObject;
+            public Vector3 Position;
+            public Quaternion Rotation;
             public bool CreateNew;
             public bool PushObject;
-            public GameObject PoolObject;
-            public Vector3? Position;
-            public Quaternion? Rotation;
+            public bool ToggleAll;
         }
 
         private Queue<PoolCoroutine> coroutines = new Queue<PoolCoroutine>();
         private int length;
 
-        internal void AddCoroutine(int poolKey, float delay, TPObjectState state, bool createNew, Vector3? position, Quaternion? rotation, bool toggleAll = false)
+        private void Awake()
         {
-            PoolCoroutine newUp = new PoolCoroutine {
+            coroutines = new Queue<PoolCoroutine>(3000);
+        }
+
+        internal void AddCoroutine(int poolKey, float delay, TPObjectState state, Vector3 position, Quaternion rotation, bool createNew = false, bool toggleAll = false)
+        {
+            AddNew(new PoolCoroutine {
                 PoolKey = poolKey,
                 Delay = delay,
                 State = state,
-                CreateNew = createNew,
+                PoolObject = null,
                 Position = position,
                 Rotation = rotation,
+                PushObject = true,
+                CreateNew = createNew,
                 ToggleAll = toggleAll,
-                PoolObject = null
-            };
-            coroutines.Enqueue(newUp);
-            length++;
+            });
         }
 
-        internal void AddCoroutine(int poolKey, float delay, GameObject poolObject, bool pushObject, Vector3? position, Quaternion? rotation)
+        internal void AddCoroutine(int poolKey, float delay, GameObject poolObject, Vector3 position, Quaternion rotation, bool pushObject = false)
         {
-            PoolCoroutine newUp = new PoolCoroutine {
+            AddNew(new PoolCoroutine {
                 PoolKey = poolKey,
                 Delay = delay,
                 State = poolObject.GetState(),
@@ -63,9 +68,14 @@ namespace TP
                 Position = position,
                 Rotation = rotation,
                 ToggleAll = false,
-                PoolObject = poolObject
-            };
-            coroutines.Enqueue(newUp);
+                PoolObject = poolObject,
+                PushObject = pushObject
+            });
+        }
+
+        private void AddNew(PoolCoroutine coroutine)
+        {
+            coroutines.Enqueue(coroutine);
             length++;
         }
 
@@ -81,9 +91,9 @@ namespace TP
                     if (!coroutine.ToggleAll)
                     {
                         if (coroutine.PoolObject != null)
-                            TPObjectPool.ToggleActive(coroutine.PoolKey, coroutine.PoolObject, coroutine.PushObject, coroutine.Position, coroutine.Rotation);
+                            TPObjectPool.ToggleActive(coroutine.PoolKey, coroutine.PoolObject, coroutine.Position, coroutine.Rotation, coroutine.PushObject);
                         else
-                            TPObjectPool.ToggleActive(coroutine.PoolKey, coroutine.State, coroutine.CreateNew, coroutine.Position, coroutine.Rotation);
+                            TPObjectPool.ToggleActive(coroutine.PoolKey, coroutine.State, coroutine.Position, coroutine.Rotation, coroutine.CreateNew);
                     }
                     else
                     {
@@ -112,21 +122,28 @@ namespace TP
         public int ObjectsLength;
         public int ActiveLength;
         public int DeactiveLength;
+        public int Capacity;
 
-        public TPPoolContainer()
+        public TPPoolContainer(int capacity = 10)
         {
-            deactiveObjects = new Stack<GameObject>();
-            activeObjects = new Stack<GameObject>();
+            Capacity = capacity;
+            deactiveObjects = new Stack<GameObject>(Capacity);
+            activeObjects = new Stack<GameObject>(Capacity);
             ObjectsLength = 0;
             ActiveLength = 0;
             DeactiveLength = 0;
         }
 
-        public TPPoolContainer(params GameObject[] gameObjects)
+        public TPPoolContainer(int capacity = 10, params GameObject[] gameObjects)
         {
+            Capacity = capacity;
             int length = gameObjects.Length;
-            deactiveObjects = new Stack<GameObject>(gameObjects);
-            activeObjects = new Stack<GameObject>();
+            deactiveObjects = new Stack<GameObject>(Capacity + length);
+            activeObjects = new Stack<GameObject>(Capacity + length);
+
+            for (int i = 0; i < length; i++)
+                Push(gameObjects[i]);
+
             ObjectsLength = length;
             ActiveLength = 0;
             DeactiveLength = length;
@@ -247,6 +264,13 @@ namespace TP
             }
             return null;
         }
+
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        private void TrimExcess()
+        {
+            deactiveObjects.TrimExcess();
+            activeObjects.TrimExcess();
+        }
     }
 
 
@@ -256,16 +280,11 @@ namespace TP
     /// <summary> This class allows you to manage TPPoolContainer collection with its pooled objects. </summary>  
     public static class TPObjectPool
     {
-        public delegate void ActivationEventHandler(GameObject poolObject, bool active);
-
-        /// <summary> This ActivationEventHandler delegate is called just before object from pool is set active/deactive </summary>  
-        public static ActivationEventHandler OnBeforeActivation { get; set; }
-
-        /// <summary> This ActivationEventHandler delegate is called just after object from pool is set active/deactive </summary>  
-        public static ActivationEventHandler OnAfterActivation { get; set; }
-
         /// <summary> Lookup holds pooled object collections </summary>
         private static Dictionary<int, TPPoolContainer> pool = new Dictionary<int, TPPoolContainer>();
+
+        private static Quaternion defaultQuaternion = Quaternion.identity;
+        private static Vector3 defaultPosition = Vector3.zero;
 
         /// <summary> Reference to coroutine manager </summary>
         private static TPObjectPooler monoCoroutineManager;
@@ -296,178 +315,41 @@ namespace TP
             }
         }
 
-        /// <summary> Toggles active(state) of first found object of given state </summary>
-        /// <param name="poolObject"> Pop pool object </param>
-        /// <param name="createNew"> Should create new object if none found? </param>
-        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
-        public static void ToggleActive(int poolKey, GameObject poolObject, bool pushObject = false, Vector3? position = null, Quaternion? rotation = null)
-        {
-            if (SafeKey(poolKey))
-            {
-                if (poolObject != null)
-                {
-                    var active = !poolObject.GetState().ActiveSelf();
-
-                    if (position.HasValue)
-                        poolObject.transform.position = position.Value;
-                    if (rotation.HasValue)
-                        poolObject.transform.rotation = rotation.Value;
-
-                    SafeInvoke(OnBeforeActivation, poolObject, active);
-                    poolObject.SetActive(active);
-                    SafeInvoke(OnAfterActivation, poolObject, active);
-
-                    if (pushObject)
-                        PushObject(poolKey, poolObject);
-                }
-            }
-        }
-
-        /// <summary> Toggles active(state) of first found object of given state </summary>
-        /// <param name="state"> State of searched object </param>
-        /// <param name="createNew"> Should create new object if none found? </param>
-        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
-        public static void ToggleActive(int poolKey, TPObjectState state = TPObjectState.Auto, bool createNew = false, Vector3? position = null, Quaternion? rotation = null)
-        {
-            if (SafeKey(poolKey))
-            {
-                GameObject poolObject = Peek(poolKey, state);
-                if (poolObject != null)
-                {
-                    var active = !poolObject.GetState().ActiveSelf();
-
-                    if (position.HasValue)
-                        poolObject.transform.position = position.Value;
-                    if (rotation.HasValue)
-                        poolObject.transform.rotation = rotation.Value;
-
-                    SafeInvoke(OnBeforeActivation, poolObject, active);
-                    pool[poolKey].ToggleState(state);
-                    SafeInvoke(OnAfterActivation, poolObject, active);
-                }
-                else if (createNew)
-                {
-                    var newObj = Peek(poolKey);
-                    if (newObj != null)
-                    {
-                        CreatePoolOrAdd(poolKey, newObj);
-                        ToggleActive(poolKey, state, createNew, position, rotation);
-                    }
-                }
-            }
-        }
-
-        /// <summary> Toggles active(state) of all found objects of given state </summary>
-        /// <param name="state"> State of searched object </param>
-        /// <param name="createNew"> Should create new object if none found? </param>
-        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
-        public static void ToggleActiveAll(int poolKey, TPObjectState state = TPObjectState.Auto, Vector3? position = null, Quaternion? rotation = null)
-        {
-            if (SafeKey(poolKey))
-            {
-                int length = Length(poolKey, state);
-                var poolObjects = PopObjects(poolKey, state);
-                for (int i = 0; i < length; i++)
-                {
-                    var poolObject = poolObjects[i];
-                    ToggleActive(poolKey, poolObject, true, position, rotation);
-                    pool[poolKey].Push(poolObject);
-                }
-            }
-        }
-
-#if NET_2_0 || NET_2_0_SUBSET
-        /// <summary> Toggles active(state) of all found objects of given state </summary> 
-        /// <param name="state"> State of searched object </param>
-        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
-        public static void ToggleActiveAll(int poolKey, float delay, TPObjectState state = TPObjectState.Auto, Vector3? position = null, Quaternion? rotation = null)
-        {
-            MonoCoroutineManager.AddCoroutine(poolKey, delay, state, false, position, rotation, true);
-        }
-
-        /// <summary> Toggles active(state) of first found object of given state </summary> 
-        /// <param name="state"> State of searched object </param>
-        /// <param name="createNew"> Should create new object if none found? </param>
-        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
-        public static void ToggleActive(int poolKey, float delay, TPObjectState state = TPObjectState.Auto, bool createNew = false, Vector3? position = null, Quaternion? rotation = null)
-        {
-            MonoCoroutineManager.AddCoroutine(poolKey, delay, state, createNew, position, rotation);
-        }
-
-        /// <summary> Toggles active(state) of object </summary> 
-        /// <param name="pushObject"> Should push object after toggling it? </param>
-        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
-        public static void ToggleActive(int poolKey, float delay, GameObject poolObject, bool pushObject = false, Vector3? position = null, Quaternion? rotation = null)
-        {
-            MonoCoroutineManager.AddCoroutine(poolKey, delay, poolObject, pushObject, position, rotation);
-        }
-#else
-
-        /// <summary> Toggles active(state) of first found object of given state after delay </summary> 
-        /// <param name="state"> State of searched object </param>
-        /// <param name="createNew"> Should create new object if none found? </param>
-        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
-        public static async void ToggleActive(int poolKey, float delay, TPObjectState state = TPObjectState.Auto, bool createNew = false, Vector3? position = null, Quaternion? rotation = null)
-        {
-            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
-            ToggleActive(poolKey, state, createNew, position, rotation);
-        }
-
-        /// <summary> Toggles active(state) of object </summary> 
-        /// <param name="state"> State of searched object </param>
-        /// <param name="pushObject"> Should push object after toggling it? </param>
-        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
-        public static async void ToggleActive(int poolKey, float delay, GameObject poolObject, bool pushObject = false, Vector3? position = null, Quaternion? rotation = null)
-        {
-            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
-            ToggleActive(poolKey, poolObject, pushObject, position, rotation);
-        }
-
-        /// <summary> Toggles active(state) of all found objects of given state after delay </summary> 
-        /// <param name="state"> State of searched object </param>
-        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
-        public static async void ToggleActiveAll(int poolKey, float delay, TPObjectState state = TPObjectState.Auto, Vector3? position = null, Quaternion? rotation = null)
-        {
-            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
-            ToggleActiveAll(poolKey, state, position, rotation);
-        }
-#endif
-
-        /// <summary> Creates or adds to existing pool with its unique key with pool objects </summary> 
+        /// <summary> Creates pool with its unique key with pool objects </summary>
+        /// <param name="capacity"> Additional capacity to stack (final is capacity + objects length) </param>
         /// <param name="poolObjects"> All pool objects which should be in one pool </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
-        public static void CreatePoolOrAdd(int poolKey, params GameObject[] poolObjects)
+        public static void CreatePool(int poolKey, int capacity = 10, params GameObject[] poolObjects)
         {
-            int length = poolObjects.Length;
-            GameObject[] spawned = new GameObject[length];
-
-            for (int i = 0; i < length; i++)
+            if (!HasKey(poolKey))
             {
-                spawned[i] = UnityEngine.Object.Instantiate(poolObjects[i]);
-                spawned[i].SetActive(false);
-            }
+                int length = poolObjects.Length;
+                GameObject[] spawned = new GameObject[length];
 
-            if (HasKey(poolKey))
-            {
                 for (int i = 0; i < length; i++)
-                    pool[poolKey].Push(spawned[i]);
+                {
+                    spawned[i] = UnityEngine.Object.Instantiate(poolObjects[i]);
+                    spawned[i].SetActive(false);
+                }
+                pool[poolKey] = new TPPoolContainer(capacity + length, spawned);
             }
             else
             {
-                pool[poolKey] = new TPPoolContainer(spawned);
+                Debug.LogError("Pool with this key already exists " + poolKey);
             }
         }
 
-        /// <summary> Creates pool or adds to existing of unique Key of length with pool object </summary> 
-        /// <param name="poolObject"> pool object which should multiplied in pool </param>
+        /// <summary> Creates pool with its unique key with pool objects </summary>
+        /// <param name="poolObject"> Pool object which should multiplied in pool </param>
         /// <param name="length"> Length of pool - how many copies of GameObject should be in pool </param>
+        /// <param name="capacity"> Additional capacity to stack (final is capacity + length) </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
-        public static void CreatePoolOrAdd(int poolKey, GameObject poolObject, int length)
+        public static void CreatePool(int poolKey, GameObject poolObject, int length, int capacity = 10)
         {
             GameObject[] copies = new GameObject[length];
             for (int i = 0; i < length; i++)
                 copies[i] = poolObject;
-            CreatePoolOrAdd(poolKey, copies);
+            CreatePool(poolKey, capacity + length, copies);
         }
 
         /// <summary> Put (doesn't instantiate) object to existing pool </summary>
@@ -499,18 +381,21 @@ namespace TP
             if (SafeKey(poolKey))
             {
                 var obj = pool[poolKey].Pop(state);
-                if (createNew)
+                if (obj == null && createNew)
                 {
-                    obj = pool[poolKey].Peek();
+                    obj = Peek(poolKey, TPObjectState.Auto, createNew);
                     if (obj != null)
                     {
                         obj = UnityEngine.Object.Instantiate(obj);
                         obj.SetActive(state.ActiveSelf());
                     }
+                    else
+                    {
+                        Debug.LogError("You can't create new object from empty pool! Pool key: " + poolKey);
+                    }
                 }
                 return obj;
             }
-
             return null;
         }
 
@@ -535,7 +420,7 @@ namespace TP
             if (SafeKey(poolKey))
             {
                 var obj = pool[poolKey].Peek(state);
-                if (createNew)
+                if (obj == null && createNew)
                 {
                     obj = pool[poolKey].Peek();
                     if (obj != null)
@@ -544,11 +429,337 @@ namespace TP
                         obj.SetActive(state.ActiveSelf());
                         pool[poolKey].Push(obj);
                     }
+                    else
+                    {
+                        Debug.LogError("You can't create new object from empty pool! Pool key: " + poolKey);
+                    }
                 }
                 return obj;
             }
             return null;
         }
+
+        /// <param name="pushObject"> Should push object to pool after toggle activation? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, GameObject poolObject, bool pushObject = false)
+        {
+            if (SafeKey(poolKey))
+            {
+                if (SafeObject(poolObject))
+                {
+                    var active = !poolObject.GetState().ActiveSelf();
+                    poolObject.SetActive(active);
+                    if (pushObject)
+                        PushObject(poolKey, poolObject);
+                }
+            }
+        }
+
+        /// <param name="pushObject"> Should push object to pool after toggle activation? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, GameObject poolObject, Vector3 position, Quaternion rotation, bool pushObject = false)
+        {
+            if (SafeKey(poolKey))
+            {
+                if (SafeObject(poolObject))
+                {
+                    var active = !poolObject.GetState().ActiveSelf();
+                    poolObject.transform.SetPositionAndRotation(position, rotation);
+                    poolObject.SetActive(active);
+                    if (pushObject)
+                        PushObject(poolKey, poolObject);
+                }
+            }
+        }
+
+        /// <param name="pushObject"> Should push object to pool after toggle activation? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, GameObject poolObject, Vector3 position, bool pushObject = false)
+        {
+            ToggleActive(poolKey, poolObject, position, poolObject.transform.rotation, pushObject);
+        }
+
+        /// <param name="pushObject"> Should push object to pool after toggle activation? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, GameObject poolObject, Quaternion rotation, bool pushObject = false)
+        {
+            ToggleActive(poolKey, poolObject, poolObject.transform.position, rotation, pushObject);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="state"> State of searched object to be toggled </param>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, TPObjectState state, bool createNew = false)
+        {
+            if (SafeKey(poolKey))
+            {
+                GameObject poolObject = PopObject(poolKey, state, createNew);
+                if (SafeObject(poolKey, state, poolObject))
+                    ToggleActive(poolKey, poolObject, true);
+            }
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="state"> State of searched object to be toggled </param>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, TPObjectState state, Vector3 position, Quaternion rotation, bool createNew = false)
+        {
+            if (SafeKey(poolKey))
+            {
+                GameObject poolObject = PopObject(poolKey, state, createNew);
+                if (SafeObject(poolKey, state, poolObject))
+                    ToggleActive(poolKey, poolObject, position, rotation, true);
+            }
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="state"> State of searched object to be toggled </param>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, TPObjectState state, Vector3 position, bool createNew = false)
+        {
+            if (SafeKey(poolKey))
+            {
+                GameObject poolObject = PopObject(poolKey, state, createNew);
+                if (SafeObject(poolKey, state, poolObject))
+                    ToggleActive(poolKey, poolObject, position, true);
+            }
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="state"> State of searched object to be toggled </param>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, TPObjectState state, Quaternion rotation, bool createNew = false)
+        {
+            if (SafeKey(poolKey))
+            {
+                GameObject poolObject = PopObject(poolKey, state, createNew);
+                if (SafeObject(poolKey, state, poolObject))
+                    ToggleActive(poolKey, poolObject, rotation, true);
+            }
+        }
+
+        /// <summary> Toggles active all found objects of given state </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActiveAll(int poolKey, TPObjectState state, Vector3 position, Quaternion rotation)
+        {
+            if (SafeKey(poolKey))
+            {
+                int length = Length(poolKey, state);
+                var poolObjects = PopObjects(poolKey, state);
+                for (int i = 0; i < length; i++)
+                    ToggleActive(poolKey, poolObjects[i], position, rotation, true);
+            }
+        }
+
+        /// <summary> Toggles active all found objects of given state </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActiveAll(int poolKey, TPObjectState state, Vector3 position)
+        {
+            if (SafeKey(poolKey))
+            {
+                int length = Length(poolKey, state);
+                var poolObjects = PopObjects(poolKey, state);
+                for (int i = 0; i < length; i++)
+                    ToggleActive(poolKey, poolObjects[i], position, true);
+            }
+        }
+
+        /// <summary> Toggles active all found objects of given state </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActiveAll(int poolKey, TPObjectState state, Quaternion rotation)
+        {
+            if (SafeKey(poolKey))
+            {
+                int length = Length(poolKey, state);
+                var poolObjects = PopObjects(poolKey, state);
+                for (int i = 0; i < length; i++)
+                    ToggleActive(poolKey, poolObjects[i], rotation, true);
+            }
+        }
+
+#if NET_2_0 || NET_2_0_SUBSET
+        /// <param name="pushObject"> Should push object after toggling it? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, float delay, GameObject poolObject, bool pushObject = false)
+        {
+            MonoCoroutineManager.AddCoroutine(poolKey, delay, poolObject, poolObject.transform.position, poolObject.transform.rotation, pushObject);
+        }
+
+        /// <param name="pushObject"> Should push object after toggling it? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, float delay, GameObject poolObject, Vector3 position, Quaternion rotation, bool pushObject = false)
+        {
+            MonoCoroutineManager.AddCoroutine(poolKey, delay, poolObject, position, rotation, pushObject);
+        }
+
+        /// <param name="pushObject"> Should push object after toggling it? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, float delay, GameObject poolObject, Vector3 position, bool pushObject = false)
+        {
+            ToggleActive(poolKey, delay, poolObject, position, poolObject.transform.rotation, pushObject);
+        }
+
+        /// <param name="pushObject"> Should push object after toggling it? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, float delay, GameObject poolObject, Quaternion rotation, bool pushObject = false)
+        {
+            ToggleActive(poolKey, delay, poolObject, poolObject.transform.position, rotation, pushObject);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, float delay, TPObjectState state, bool createNew = false)
+        {
+            MonoCoroutineManager.AddCoroutine(poolKey, delay, state, defaultPosition, defaultQuaternion, createNew);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, float delay, TPObjectState state, Vector3 position, Quaternion rotation, bool createNew = false)
+        {
+            MonoCoroutineManager.AddCoroutine(poolKey, delay, state, position, rotation, createNew);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, float delay, TPObjectState state, Vector3 position, bool createNew = false)
+        {
+            ToggleActive(poolKey, delay, state, position, defaultQuaternion, createNew);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActive(int poolKey, float delay, TPObjectState state, Quaternion rotation, bool createNew = false)
+        {
+            ToggleActive(poolKey, delay, state, defaultPosition, rotation, createNew);
+        }
+
+        /// <summary> Toggles active all found objects of given state </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActiveAll(int poolKey, float delay, TPObjectState state, Vector3 position, Quaternion rotation)
+        {
+            MonoCoroutineManager.AddCoroutine(poolKey, delay, state, position, rotation, false, true);
+        }
+
+        /// <summary> Toggles active all found objects of given state </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActiveAll(int poolKey, float delay, TPObjectState state, Vector3 position)
+        {
+            ToggleActiveAll(poolKey, delay, state, position, defaultQuaternion);
+        }
+
+        /// <summary> Toggles active all found objects of given state </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActiveAll(int poolKey, float delay, TPObjectState state, Quaternion rotation)
+        {
+            ToggleActiveAll(poolKey, delay, state, defaultPosition, rotation);
+        }
+#else
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static async void ToggleActive(int poolKey, float delay, GameObject poolObject, bool pushObject = false)
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            ToggleActive(poolKey, poolObject, pushObject);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static async void ToggleActive(int poolKey, float delay, GameObject poolObject, Vector3 position, Quaternion rotation, bool pushObject = false)
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            ToggleActive(poolKey, poolObject, position, rotation, pushObject);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static async void ToggleActive(int poolKey, float delay, GameObject poolObject, Vector3 position, bool pushObject = false)
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            ToggleActive(poolKey, poolObject, position, pushObject);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static async void ToggleActive(int poolKey, float delay, GameObject poolObject, Quaternion rotation, bool pushObject = false)
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            ToggleActive(poolKey, poolObject, rotation, pushObject);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static async void ToggleActive(int poolKey, float delay, TPObjectState state, bool createNew = false)
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            ToggleActive(poolKey, state, createNew);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static async void ToggleActive(int poolKey, float delay, TPObjectState state, Vector3 position, Quaternion rotation, bool createNew = false)
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            ToggleActive(poolKey, state, position, rotation, createNew);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static async void ToggleActive(int poolKey, float delay, TPObjectState state, Vector3 position, bool createNew = false)
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            ToggleActive(poolKey, state, position, createNew);
+        }
+
+        /// <summary> Toggles active of first found object with given state </summary>
+        /// <param name="createNew"> Should create new object if none found? </param>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static async void ToggleActive(int poolKey, float delay, TPObjectState state, Quaternion rotation, bool createNew = false)
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            ToggleActive(poolKey, state, rotation, createNew);
+        }
+
+        /// <summary> Toggles active all found objects of given state </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static async void ToggleActiveAll(int poolKey, float delay, TPObjectState state, Vector3 position, Quaternion rotation)
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            ToggleActiveAll(poolKey, state, position, rotation);
+        }
+
+        /// <summary> Toggles active all found objects of given state </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static async void ToggleActiveAll(int poolKey, float delay, TPObjectState state, Vector3 position)
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            ToggleActiveAll(poolKey, state, position);
+        }
+
+        /// <summary> Toggles active all found objects of given state </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static async void ToggleActiveAll(int poolKey, float delay, TPObjectState state, Quaternion rotation)
+        {
+            await System.Threading.Tasks.Task.Delay(System.TimeSpan.FromSeconds(delay));
+            ToggleActiveAll(poolKey, state, rotation);
+        }
+#endif
 
         /// <summary> Returns length of all objects in state from its pool </summary>
         /// <param name="state"> State of searched object, Auto will return all objects length </param>
@@ -639,19 +850,34 @@ namespace TP
                 poolObjects[i].SetActive(active);
         }
 
-        /// <summary> This checks for null before ActivationEventHandler is called </summary>  
-        private static void SafeInvoke(ActivationEventHandler onActivation, GameObject poolObject, bool value)
-        {
-            if (onActivation != null)
-                onActivation(poolObject, value);
-        }
-
         /// <summary> This checks for existing key. Returns true if is safe </summary>  
         private static bool SafeKey(int poolKey)
         {
             if (!HasKey(poolKey))
             {
                 Debug.LogError("Pool with this key doesn't exist: " + poolKey);
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary> This checks for existing key. Returns true if is safe </summary>  
+        private static bool SafeObject(GameObject poolObject)
+        {
+            if (poolObject == null)
+            {
+                Debug.LogError("You're trying toggle active Null object!");
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary> This checks for existing key. Returns true if is safe </summary>  
+        private static bool SafeObject(int poolKey, TPObjectState state, GameObject poolObject)
+        {
+            if (poolObject == null)
+            {
+                Debug.LogWarning("No objects with state " + state + " found. Pool key: " + poolKey);
                 return false;
             }
             return true;
