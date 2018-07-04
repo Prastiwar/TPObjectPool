@@ -373,7 +373,6 @@ namespace TP
         }
 
         /// <summary> Takes out (removes and returns obj from pool) first object in state from pool </summary>
-        /// <param name="state"> State of searched object </param>
         /// <param name="createNew"> Should create new if don't find? </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static GameObject PopObject(int poolKey, TPObjectState state = TPObjectState.Auto, bool createNew = false)
@@ -400,7 +399,6 @@ namespace TP
         }
 
         /// <summary> Takes out (removes and returns objs from pool) array of objects in state from pool </summary>
-        /// <param name="state"> State of searched object </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static GameObject[] PopObjects(int poolKey, TPObjectState state = TPObjectState.Auto)
         {
@@ -411,8 +409,7 @@ namespace TP
             return array;
         }
 
-        /// <summary> Returns (without removing from pool) object in state from pool </summary> 
-        /// <param name="state"> State of searched object </param>
+        /// <summary> Returns (without removing from pool) object in state from pool </summary>
         /// <param name="createNew"> Should create new if don't find? </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static GameObject Peek(int poolKey, TPObjectState state = TPObjectState.Auto, bool createNew = false)
@@ -544,6 +541,19 @@ namespace TP
 
         /// <summary> Toggles active all found objects of given state </summary>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void ToggleActiveAll(int poolKey, TPObjectState state)
+        {
+            if (SafeKey(poolKey))
+            {
+                int length = Length(poolKey, state);
+                var poolObjects = PopObjects(poolKey, state);
+                for (int i = 0; i < length; i++)
+                    ToggleActive(poolKey, poolObjects[i], true);
+            }
+        }
+
+        /// <summary> Toggles active all found objects of given state </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActiveAll(int poolKey, TPObjectState state, Vector3 position, Quaternion rotation)
         {
             if (SafeKey(poolKey))
@@ -664,7 +674,6 @@ namespace TP
         }
 #else
 
-        /// <summary> Toggles active of first found object with given state </summary>
         /// <param name="createNew"> Should create new object if none found? </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static async void ToggleActive(int poolKey, float delay, GameObject poolObject, bool pushObject = false)
@@ -673,7 +682,6 @@ namespace TP
             ToggleActive(poolKey, poolObject, pushObject);
         }
 
-        /// <summary> Toggles active of first found object with given state </summary>
         /// <param name="createNew"> Should create new object if none found? </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static async void ToggleActive(int poolKey, float delay, GameObject poolObject, Vector3 position, Quaternion rotation, bool pushObject = false)
@@ -682,7 +690,6 @@ namespace TP
             ToggleActive(poolKey, poolObject, position, rotation, pushObject);
         }
 
-        /// <summary> Toggles active of first found object with given state </summary>
         /// <param name="createNew"> Should create new object if none found? </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static async void ToggleActive(int poolKey, float delay, GameObject poolObject, Vector3 position, bool pushObject = false)
@@ -691,7 +698,6 @@ namespace TP
             ToggleActive(poolKey, poolObject, position, pushObject);
         }
 
-        /// <summary> Toggles active of first found object with given state </summary>
         /// <param name="createNew"> Should create new object if none found? </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static async void ToggleActive(int poolKey, float delay, GameObject poolObject, Quaternion rotation, bool pushObject = false)
@@ -762,7 +768,6 @@ namespace TP
 #endif
 
         /// <summary> Returns length of all objects in state from its pool </summary>
-        /// <param name="state"> State of searched object, Auto will return all objects length </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static int Length(int poolKey, TPObjectState state = TPObjectState.Auto)
         {
@@ -782,7 +787,6 @@ namespace TP
         }
 
         /// <summary> Checks if there is any object in state in pool </summary>
-        /// <param name="state"> State of searched object </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static bool HasAnyObject(int poolKey, TPObjectState state = TPObjectState.Auto)
         {
