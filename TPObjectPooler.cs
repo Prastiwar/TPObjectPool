@@ -136,17 +136,13 @@ namespace TP
 
         public TPPoolContainer(int capacity = 10, params GameObject[] gameObjects)
         {
-            Capacity = capacity;
             int length = gameObjects.Length;
-            deactiveObjects = new Stack<GameObject>(Capacity + length);
-            activeObjects = new Stack<GameObject>(Capacity + length);
+            Capacity = capacity + length;
+            deactiveObjects = new Stack<GameObject>(Capacity);
+            activeObjects = new Stack<GameObject>(Capacity);
 
             for (int i = 0; i < length; i++)
                 Push(gameObjects[i]);
-
-            ObjectsLength = length;
-            ActiveLength = 0;
-            DeactiveLength = length;
         }
 
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
@@ -382,7 +378,7 @@ namespace TP
                 var obj = pool[poolKey].Pop(state);
                 if (obj == null && createNew)
                 {
-                    obj = Peek(poolKey, TPObjectState.Auto, createNew);
+                    obj = pool[poolKey].Pop();
                     if (obj != null)
                     {
                         obj = UnityEngine.Object.Instantiate(obj);
@@ -444,8 +440,7 @@ namespace TP
             {
                 if (SafeObject(poolObject))
                 {
-                    var active = !poolObject.GetState().ActiveSelf();
-                    poolObject.SetActive(active);
+                    poolObject.SetActive(!poolObject.activeSelf);
                     if (pushObject)
                         PushObject(poolKey, poolObject);
                 }
@@ -460,9 +455,8 @@ namespace TP
             {
                 if (SafeObject(poolObject))
                 {
-                    var active = !poolObject.GetState().ActiveSelf();
                     poolObject.transform.SetPositionAndRotation(position, rotation);
-                    poolObject.SetActive(active);
+                    poolObject.SetActive(!poolObject.activeSelf);
                     if (pushObject)
                         PushObject(poolKey, poolObject);
                 }
@@ -836,7 +830,7 @@ namespace TP
         /// <summary> Converts State to GameObject activeSelf </summary>
         public static bool ActiveSelf(this TPObjectState state)
         {
-            return state == TPObjectState.Deactive ? false : true;
+            return state == TPObjectState.Active ? true : false;
         }
 
         /// <summary> Returns true if poolObject has given state </summary>
