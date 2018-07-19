@@ -2,7 +2,9 @@
 *   Authored by Tomasz Piowczyk
 *   MIT LICENSE (https://github.com/Prastiwar/TPObjectPool/blob/master/LICENSE)
 */
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using UnityEngine;
 
@@ -21,7 +23,7 @@ namespace TP
     internal class TPObjectPooler : MonoBehaviour
     {
         /// <summary> Coroutine object hold data needed for ToggleActive </summary>
-        [System.Serializable]
+        [Serializable]
         private struct PoolCoroutine
         {
             public int PoolKey;
@@ -149,17 +151,30 @@ namespace TP
         public void Push(GameObject poolObject)
         {
             var state = poolObject.GetState();
-            ObjectsLength++;
             if (state == TPObjectState.Deactive)
             {
-                deactiveObjects.Push(poolObject);
-                DeactiveLength++;
+                PushDeactive(poolObject);
             }
             else
             {
-                activeObjects.Push(poolObject);
-                ActiveLength++;
+                PushActive(poolObject);
             }
+        }
+
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public void PushActive(GameObject poolObject)
+        {
+            ObjectsLength++;
+            activeObjects.Push(poolObject);
+            ActiveLength++;
+        }
+
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public void PushDeactive(GameObject poolObject)
+        {
+            ObjectsLength++;
+            deactiveObjects.Push(poolObject);
+            DeactiveLength++;
         }
 
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
@@ -279,27 +294,18 @@ namespace TP
         /// <summary> Lookup holds pooled object collections </summary>
         private static Dictionary<int, TPPoolContainer> pool = new Dictionary<int, TPPoolContainer>();
 
-        private static Quaternion defaultQuaternion = Quaternion.identity;
-        private static Vector3 defaultPosition = Vector3.zero;
-
         /// <summary> Reference to coroutine manager </summary>
         private static TPObjectPooler monoCoroutineManager;
 
-        /// <summary> Max array length before rebuilding it </summary>
-        private static int reusableArraysLength = 32;
+        /// <summary> Persistant allocated list to prevent creating GC runtime </summary>
+        private static List<GameObject> reusableList = new List<GameObject>(64);
 
-        /// <summary> Persistant allocated array to prevent creating GC runtime </summary>
-        private static GameObject[] reusableArray = new GameObject[reusableArraysLength];
-
-        /// <summary> Returns reusableArray or rebuilds it if needed </summary>
-        private static GameObject[] ReusableArray(int length)
-        {
-            if (reusableArraysLength < length)
-            {
-                reusableArray = new GameObject[length];
-                reusableArraysLength = length;
+        /// <summary> Returns cleaned reusableList </summary>
+        private static List<GameObject> ReusableList {
+            get {
+                reusableList.Clear();
+                return reusableList;
             }
-            return reusableArray;
         }
 
         /// <summary> Reference to coroutine manager </summary>
@@ -352,20 +358,37 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void PushObject(int poolKey, GameObject poolObject)
         {
-            if (SafeKey(poolKey))
-                pool[poolKey].Push(poolObject);
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            pool[poolKey].Push(poolObject);
         }
 
         /// <summary> Put (doesn't instantiate) object to existing pool </summary>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void PushObjects(int poolKey, params GameObject[] poolObjects)
         {
-            if (SafeKey(poolKey))
-            {
-                int length = poolObjects.Length;
-                for (int i = 0; i < length; i++)
-                    pool[poolKey].Push(poolObjects[i]);
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            int length = poolObjects.Length;
+            for (int i = 0; i < length; i++)
+                pool[poolKey].Push(poolObjects[i]);
+        }
+
+        /// <summary> Put (doesn't instantiate) object to existing pool </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static void PushObjects(int poolKey, List<GameObject> poolObjects)
+        {
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            int length = poolObjects.Count;
+            for (int i = 0; i < length; i++)
+                pool[poolKey].Push(poolObjects[i]);
         }
 
         /// <summary> Takes out (removes and returns obj from pool) first object in state from pool </summary>
@@ -373,25 +396,26 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static GameObject PopObject(int poolKey, TPObjectState state = TPObjectState.Auto, bool createNew = false)
         {
-            if (SafeKey(poolKey))
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return null;
+#endif
+
+            var obj = pool[poolKey].Pop(state);
+            if (obj == null && createNew)
             {
-                var obj = pool[poolKey].Pop(state);
-                if (obj == null && createNew)
+                obj = pool[poolKey].Pop();
+                if (obj != null)
                 {
-                    obj = pool[poolKey].Pop();
-                    if (obj != null)
-                    {
-                        obj = UnityEngine.Object.Instantiate(obj);
-                        obj.SetActive(state.ActiveSelf());
-                    }
-                    else
-                    {
-                        Debug.LogError("You can't create new object from empty pool! Pool key: " + poolKey);
-                    }
+                    obj = UnityEngine.Object.Instantiate(obj);
+                    obj.SetActive(state.ActiveSelf());
                 }
-                return obj;
+                else
+                {
+                    Debug.LogError("You can't create new object from empty pool! Pool key: " + poolKey);
+                }
             }
-            return null;
+            return obj;
         }
 
         /// <summary> Takes out (removes and returns objs from pool) array of objects in state from pool </summary>
@@ -399,10 +423,21 @@ namespace TP
         public static GameObject[] PopObjects(int poolKey, TPObjectState state = TPObjectState.Auto)
         {
             int length = Length(poolKey, state);
-            var array = ReusableArray(length);
+            List<GameObject> list = ReusableList;
             for (int i = 0; i < length; i++)
-                array[i] = PopObject(poolKey, state);
-            return array;
+                list.Add(PopObject(poolKey, state));
+            return list.ToArray();
+        }
+
+        /// <summary> Takes out (removes and returns objs from pool) list of objects in state from pool </summary>
+        [MethodImpl((MethodImplOptions)0x100)] // agressive inline
+        public static List<GameObject> PopObjectsList(int poolKey, TPObjectState state = TPObjectState.Auto)
+        {
+            int length = Length(poolKey, state);
+            List<GameObject> list = ReusableList;
+            for (int i = 0; i < length; i++)
+                list.Add(PopObject(poolKey, state));
+            return list;
         }
 
         /// <summary> Returns (without removing from pool) object in state from pool </summary>
@@ -410,57 +445,53 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static GameObject Peek(int poolKey, TPObjectState state = TPObjectState.Auto, bool createNew = false)
         {
-            if (SafeKey(poolKey))
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return null;
+#endif
+            var obj = pool[poolKey].Peek(state);
+            if (obj == null && createNew)
             {
-                var obj = pool[poolKey].Peek(state);
-                if (obj == null && createNew)
+                obj = pool[poolKey].Peek();
+                if (obj != null)
                 {
-                    obj = pool[poolKey].Peek();
-                    if (obj != null)
-                    {
-                        obj = UnityEngine.Object.Instantiate(obj);
-                        obj.SetActive(state.ActiveSelf());
-                        pool[poolKey].Push(obj);
-                    }
-                    else
-                    {
-                        Debug.LogError("You can't create new object from empty pool! Pool key: " + poolKey);
-                    }
+                    obj = UnityEngine.Object.Instantiate(obj);
+                    obj.SetActive(state.ActiveSelf());
+                    pool[poolKey].Push(obj);
                 }
-                return obj;
+                else
+                {
+                    Debug.LogError("You can't create new object from empty pool! Pool key: " + poolKey);
+                }
             }
-            return null;
+            return obj;
         }
 
         /// <param name="pushObject"> Should push object to pool after toggle activation? </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActive(int poolKey, GameObject poolObject, bool pushObject = false)
         {
-            if (SafeKey(poolKey))
-            {
-                if (SafeObject(poolObject))
-                {
-                    poolObject.SetActive(!poolObject.activeSelf);
-                    if (pushObject)
-                        PushObject(poolKey, poolObject);
-                }
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey) || !SafeObject(poolObject))
+                return;
+#endif
+            poolObject.SetActive(!poolObject.activeSelf);
+            if (pushObject)
+                PushObject(poolKey, poolObject);
         }
 
         /// <param name="pushObject"> Should push object to pool after toggle activation? </param>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActive(int poolKey, GameObject poolObject, Vector3 position, Quaternion rotation, bool pushObject = false)
         {
-            if (SafeKey(poolKey))
-            {
-                if (SafeObject(poolObject))
-                {
-                    poolObject.transform.SetPositionAndRotation(position, rotation);
-                    poolObject.SetActive(!poolObject.activeSelf);
-                    if (pushObject)
-                        PushObject(poolKey, poolObject);
-                }
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey) || !SafeObject(poolObject))
+                return;
+#endif
+            poolObject.transform.SetPositionAndRotation(position, rotation);
+            poolObject.SetActive(!poolObject.activeSelf);
+            if (pushObject)
+                PushObject(poolKey, poolObject);
         }
 
         /// <param name="pushObject"> Should push object to pool after toggle activation? </param>
@@ -483,12 +514,17 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActive(int poolKey, TPObjectState state, bool createNew = false)
         {
-            if (SafeKey(poolKey))
-            {
-                GameObject poolObject = PopObject(poolKey, state, createNew);
-                if (SafeObject(poolKey, state, poolObject))
-                    ToggleActive(poolKey, poolObject, true);
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            GameObject poolObject = PopObject(poolKey, state, createNew);
+
+#if TPObjectPoolSafeChecks
+            if (!SafeObject(poolKey, state, poolObject))
+                return;
+#endif
+            ToggleActive(poolKey, poolObject, true);
         }
 
         /// <summary> Toggles active of first found object with given state </summary>
@@ -497,12 +533,17 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActive(int poolKey, TPObjectState state, Vector3 position, Quaternion rotation, bool createNew = false)
         {
-            if (SafeKey(poolKey))
-            {
-                GameObject poolObject = PopObject(poolKey, state, createNew);
-                if (SafeObject(poolKey, state, poolObject))
-                    ToggleActive(poolKey, poolObject, position, rotation, true);
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            GameObject poolObject = PopObject(poolKey, state, createNew);
+
+#if TPObjectPoolSafeChecks
+            if (!SafeObject(poolKey, state, poolObject))
+                return;
+#endif
+            ToggleActive(poolKey, poolObject, position, rotation, true);
         }
 
         /// <summary> Toggles active of first found object with given state </summary>
@@ -511,12 +552,17 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActive(int poolKey, TPObjectState state, Vector3 position, bool createNew = false)
         {
-            if (SafeKey(poolKey))
-            {
-                GameObject poolObject = PopObject(poolKey, state, createNew);
-                if (SafeObject(poolKey, state, poolObject))
-                    ToggleActive(poolKey, poolObject, position, true);
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            GameObject poolObject = PopObject(poolKey, state, createNew);
+
+#if TPObjectPoolSafeChecks
+            if (!SafeObject(poolKey, state, poolObject))
+                return;
+#endif
+            ToggleActive(poolKey, poolObject, position, true);
         }
 
         /// <summary> Toggles active of first found object with given state </summary>
@@ -525,64 +571,73 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActive(int poolKey, TPObjectState state, Quaternion rotation, bool createNew = false)
         {
-            if (SafeKey(poolKey))
-            {
-                GameObject poolObject = PopObject(poolKey, state, createNew);
-                if (SafeObject(poolKey, state, poolObject))
-                    ToggleActive(poolKey, poolObject, rotation, true);
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            GameObject poolObject = PopObject(poolKey, state, createNew);
+
+#if TPObjectPoolSafeChecks
+            if (!SafeObject(poolKey, state, poolObject))
+                return;
+#endif
+            ToggleActive(poolKey, poolObject, rotation, true);
         }
 
         /// <summary> Toggles active all found objects of given state </summary>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActiveAll(int poolKey, TPObjectState state)
         {
-            if (SafeKey(poolKey))
-            {
-                int length = Length(poolKey, state);
-                var poolObjects = PopObjects(poolKey, state);
-                for (int i = 0; i < length; i++)
-                    ToggleActive(poolKey, poolObjects[i], true);
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            int length = Length(poolKey, state);
+            var poolObjects = PopObjectsList(poolKey, state);
+            for (int i = 0; i < length; i++)
+                ToggleActive(poolKey, poolObjects[i], true);
         }
 
         /// <summary> Toggles active all found objects of given state </summary>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActiveAll(int poolKey, TPObjectState state, Vector3 position, Quaternion rotation)
         {
-            if (SafeKey(poolKey))
-            {
-                int length = Length(poolKey, state);
-                var poolObjects = PopObjects(poolKey, state);
-                for (int i = 0; i < length; i++)
-                    ToggleActive(poolKey, poolObjects[i], position, rotation, true);
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            int length = Length(poolKey, state);
+            var poolObjects = PopObjectsList(poolKey, state);
+            for (int i = 0; i < length; i++)
+                ToggleActive(poolKey, poolObjects[i], position, rotation, true);
         }
 
         /// <summary> Toggles active all found objects of given state </summary>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActiveAll(int poolKey, TPObjectState state, Vector3 position)
         {
-            if (SafeKey(poolKey))
-            {
-                int length = Length(poolKey, state);
-                var poolObjects = PopObjects(poolKey, state);
-                for (int i = 0; i < length; i++)
-                    ToggleActive(poolKey, poolObjects[i], position, true);
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            int length = Length(poolKey, state);
+            var poolObjects = PopObjectsList(poolKey, state);
+            for (int i = 0; i < length; i++)
+                ToggleActive(poolKey, poolObjects[i], position, true);
         }
 
         /// <summary> Toggles active all found objects of given state </summary>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActiveAll(int poolKey, TPObjectState state, Quaternion rotation)
         {
-            if (SafeKey(poolKey))
-            {
-                int length = Length(poolKey, state);
-                var poolObjects = PopObjects(poolKey, state);
-                for (int i = 0; i < length; i++)
-                    ToggleActive(poolKey, poolObjects[i], rotation, true);
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            int length = Length(poolKey, state);
+            var poolObjects = PopObjectsList(poolKey, state);
+            for (int i = 0; i < length; i++)
+                ToggleActive(poolKey, poolObjects[i], rotation, true);
         }
 
 #if NET_2_0 || NET_2_0_SUBSET
@@ -619,7 +674,7 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActive(int poolKey, float delay, TPObjectState state, bool createNew = false)
         {
-            MonoCoroutineManager.AddCoroutine(poolKey, delay, state, defaultPosition, defaultQuaternion, createNew);
+            MonoCoroutineManager.AddCoroutine(poolKey, delay, state, Vector3.zero, Quaternion.identity, createNew);
         }
 
         /// <summary> Toggles active of first found object with given state </summary>
@@ -635,7 +690,7 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActive(int poolKey, float delay, TPObjectState state, Vector3 position, bool createNew = false)
         {
-            ToggleActive(poolKey, delay, state, position, defaultQuaternion, createNew);
+            ToggleActive(poolKey, delay, state, position, Quaternion.identity, createNew);
         }
 
         /// <summary> Toggles active of first found object with given state </summary>
@@ -643,7 +698,7 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActive(int poolKey, float delay, TPObjectState state, Quaternion rotation, bool createNew = false)
         {
-            ToggleActive(poolKey, delay, state, defaultPosition, rotation, createNew);
+            ToggleActive(poolKey, delay, state, Vector3.zero, rotation, createNew);
         }
 
         /// <summary> Toggles active all found objects of given state </summary>
@@ -657,14 +712,14 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActiveAll(int poolKey, float delay, TPObjectState state, Vector3 position)
         {
-            ToggleActiveAll(poolKey, delay, state, position, defaultQuaternion);
+            ToggleActiveAll(poolKey, delay, state, position, Quaternion.identity);
         }
 
         /// <summary> Toggles active all found objects of given state </summary>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void ToggleActiveAll(int poolKey, float delay, TPObjectState state, Quaternion rotation)
         {
-            ToggleActiveAll(poolKey, delay, state, defaultPosition, rotation);
+            ToggleActiveAll(poolKey, delay, state, Vector3.zero, rotation);
         }
 #else
 
@@ -765,17 +820,18 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static int Length(int poolKey, TPObjectState state = TPObjectState.Auto)
         {
-            if (SafeKey(poolKey))
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return 0;
+#endif
+            switch (state)
             {
-                switch (state)
-                {
-                    case TPObjectState.Deactive:
-                        return pool[poolKey].DeactiveLength;
-                    case TPObjectState.Active:
-                        return pool[poolKey].ActiveLength;
-                    case TPObjectState.Auto:
-                        return pool[poolKey].ObjectsLength;
-                }
+                case TPObjectState.Deactive:
+                    return pool[poolKey].DeactiveLength;
+                case TPObjectState.Active:
+                    return pool[poolKey].ActiveLength;
+                case TPObjectState.Auto:
+                    return pool[poolKey].ObjectsLength;
             }
             return 0;
         }
@@ -791,19 +847,23 @@ namespace TP
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void RemoveUnused(int poolKey, bool destroyObjects = true)
         {
-            if (SafeKey(poolKey))
-                pool[poolKey].RemoveUnused(destroyObjects);
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            pool[poolKey].RemoveUnused(destroyObjects);
         }
 
         /// <summary> Clears whole pool. </summary>
         [MethodImpl((MethodImplOptions)0x100)] // agressive inline
         public static void Dispose(int poolKey, bool destroyObjects = true)
         {
-            if (SafeKey(poolKey))
-            {
-                pool[poolKey].Dispose(destroyObjects);
-                pool.Remove(poolKey);
-            }
+#if TPObjectPoolSafeChecks
+            if (!SafeKey(poolKey))
+                return;
+#endif
+            pool[poolKey].Dispose(destroyObjects);
+            pool.Remove(poolKey);
         }
 
         /// <summary> Clears all pools </summary>
@@ -848,6 +908,7 @@ namespace TP
                 poolObjects[i].SetActive(active);
         }
 
+#if TPObjectPoolSafeChecks
         /// <summary> This checks for existing key. Returns true if is safe </summary>  
         private static bool SafeKey(int poolKey)
         {
@@ -880,6 +941,75 @@ namespace TP
             }
             return true;
         }
-
+#endif
     }
+
+#if UNITY_EDITOR
+    [UnityEditor.InitializeOnLoad]
+    internal class TPPoolEditor : UnityEditor.Editor
+    {
+        private const string menuName = "TP/Disable TPObjectPool SafeChecks";
+        private static bool safeChecksEnabled;
+        private readonly static string safeCheckDirective = "TPObjectPoolSafeChecks";
+        private static UnityEditor.BuildTargetGroup targetGroup { get { return UnityEditor.EditorUserBuildSettings.selectedBuildTargetGroup; } }
+
+        static TPPoolEditor()
+        {
+            safeChecksEnabled = UnityEditor.EditorPrefs.GetBool(menuName, false);
+
+            UnityEditor.EditorApplication.delayCall += () => {
+                Toggle(safeChecksEnabled);
+            };
+        }
+
+        [UnityEditor.MenuItem(menuName)]
+        private static void SafeCheckToggle()
+        {
+            Toggle(!safeChecksEnabled);
+        }
+
+        private static void Toggle(bool enabled)
+        {
+            UnityEditor.EditorPrefs.SetBool(menuName, enabled);
+            safeChecksEnabled = enabled;
+            UnityEditor.Menu.SetChecked(menuName, enabled);
+
+            if (enabled)
+                DisableSafeChecks();
+            else
+                EnableSafeChecks();
+        }
+
+        private static void DisableSafeChecks()
+        {
+            List<string> allDefines = GetDefines();
+            if (allDefines.Contains(safeCheckDirective))
+            {
+                allDefines.Remove(safeCheckDirective);
+                SetDefines(allDefines);
+            }
+        }
+
+        private static void EnableSafeChecks()
+        {
+            List<string> allDefines = GetDefines();
+            if (!allDefines.Contains(safeCheckDirective))
+            {
+                allDefines.Add(safeCheckDirective);
+                SetDefines(allDefines);
+            }
+        }
+
+        private static void SetDefines(List<string> allDefines)
+        {
+            UnityEditor.PlayerSettings.SetScriptingDefineSymbolsForGroup(targetGroup, string.Join(";", allDefines.ToArray()));
+        }
+
+        private static List<string> GetDefines()
+        {
+            string defines = UnityEditor.PlayerSettings.GetScriptingDefineSymbolsForGroup(targetGroup);
+            return defines.Split(';').ToList();
+        }
+    }
+#endif
 }
