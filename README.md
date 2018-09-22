@@ -1,3 +1,5 @@
+# **This is an archived repository. Probably you want to check my** [TPFramework](https://github.com/Prastiwar/TPFrameworkUnity) **where it is merged into.**
+
 # TPObjectPool
 
 ***Fully documented, lightweight script that helps you to increase performance in your game by manage Object Pooling in Unity.***
